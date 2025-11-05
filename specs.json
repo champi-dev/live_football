@@ -1,0 +1,780 @@
+{
+  "project_name": "LiveFootball Insights",
+  "project_description": "Real-time soccer match tracking platform with AI-powered analysis, focusing on major leagues and international matches. Features live updates, GPT-4 Mini insights, team following, and notifications.",
+  
+  "tech_stack": {
+    "frontend": {
+      "framework": "React 18 with TypeScript",
+      "routing": "React Router v6",
+      "state_management": "Zustand (lightweight, perfect for real-time updates)",
+      "styling": "Tailwind CSS + shadcn/ui components",
+      "real_time": "Socket.io-client",
+      "forms": "React Hook Form + Zod validation",
+      "notifications": "React Hot Toast + Web Push API",
+      "http_client": "Axios with interceptors",
+      "date_handling": "date-fns",
+      "icons": "Lucide React",
+      "animations": "Framer Motion"
+    },
+    "backend": {
+      "runtime": "Node.js 20+ with TypeScript",
+      "framework": "Express.js",
+      "real_time": "Socket.io",
+      "orm": "Prisma with PostgreSQL",
+      "caching": "Redis (match data, user preferences, API responses)",
+      "authentication": "JWT + refresh tokens",
+      "validation": "Zod schemas",
+      "job_queue": "BullMQ (for periodic API fetching, notifications)",
+      "rate_limiting": "express-rate-limit + Redis store"
+    },
+    "database": {
+      "primary": "PostgreSQL 15+ (matches, teams, users, follows, notifications)",
+      "cache": "Redis 7+ (live scores, session data, rate limits)"
+    },
+    "ai_and_external_apis": {
+      "match_data": "API-FOOTBALL (RapidAPI) - comprehensive soccer data",
+      "ai_analysis": "OpenAI GPT-4o-mini for match insights",
+      "web_search": "OpenAI GPT-4o-mini with web search capability or Tavily API",
+      "notifications": "Firebase Cloud Messaging (FCM) for push notifications"
+    },
+    "deployment": {
+      "hosting": "Railway (backend + PostgreSQL + Redis)",
+      "frontend": "Vercel",
+      "monitoring": "Sentry for error tracking"
+    }
+  },
+
+  "database_schema": {
+    "tables": [
+      {
+        "name": "users",
+        "columns": [
+          "id UUID PRIMARY KEY",
+          "email VARCHAR(255) UNIQUE NOT NULL",
+          "password_hash VARCHAR(255) NOT NULL",
+          "name VARCHAR(100) NOT NULL",
+          "avatar_url VARCHAR(500)",
+          "notification_enabled BOOLEAN DEFAULT true",
+          "fcm_token VARCHAR(500)",
+          "created_at TIMESTAMP DEFAULT NOW()",
+          "updated_at TIMESTAMP DEFAULT NOW()"
+        ],
+        "indexes": ["email", "created_at"]
+      },
+      {
+        "name": "teams",
+        "columns": [
+          "id INTEGER PRIMARY KEY (API team ID)",
+          "name VARCHAR(100) NOT NULL",
+          "logo_url VARCHAR(500)",
+          "country VARCHAR(100)",
+          "league_id INTEGER",
+          "league_name VARCHAR(100)",
+          "is_major BOOLEAN DEFAULT false (filter for major leagues only)",
+          "created_at TIMESTAMP DEFAULT NOW()",
+          "updated_at TIMESTAMP DEFAULT NOW()"
+        ],
+        "indexes": ["name", "league_id", "is_major"]
+      },
+      {
+        "name": "matches",
+        "columns": [
+          "id INTEGER PRIMARY KEY (API fixture ID)",
+          "home_team_id INTEGER REFERENCES teams(id)",
+          "away_team_id INTEGER REFERENCES teams(id)",
+          "league_id INTEGER NOT NULL",
+          "league_name VARCHAR(100)",
+          "match_date TIMESTAMP NOT NULL",
+          "status VARCHAR(50) NOT NULL (NS, LIVE, HT, FT, PST, CANC)",
+          "home_score INTEGER DEFAULT 0",
+          "away_score INTEGER DEFAULT 0",
+          "venue VARCHAR(200)",
+          "elapsed_time INTEGER",
+          "is_major_match BOOLEAN DEFAULT true",
+          "last_updated TIMESTAMP DEFAULT NOW()",
+          "created_at TIMESTAMP DEFAULT NOW()"
+        ],
+        "indexes": ["match_date", "status", "home_team_id", "away_team_id", "is_major_match"]
+      },
+      {
+        "name": "match_events",
+        "columns": [
+          "id UUID PRIMARY KEY",
+          "match_id INTEGER REFERENCES matches(id)",
+          "event_type VARCHAR(50) (Goal, Card, Substitution, VAR)",
+          "team_id INTEGER REFERENCES teams(id)",
+          "player_name VARCHAR(100)",
+          "minute INTEGER",
+          "detail TEXT",
+          "created_at TIMESTAMP DEFAULT NOW()"
+        ],
+        "indexes": ["match_id", "created_at"]
+      },
+      {
+        "name": "ai_insights",
+        "columns": [
+          "id UUID PRIMARY KEY",
+          "match_id INTEGER REFERENCES matches(id)",
+          "insight_type VARCHAR(50) (pre_match, live_update, halftime, post_match)",
+          "content TEXT NOT NULL",
+          "generated_at_minute INTEGER",
+          "tokens_used INTEGER",
+          "created_at TIMESTAMP DEFAULT NOW()"
+        ],
+        "indexes": ["match_id", "insight_type", "created_at"]
+      },
+      {
+        "name": "team_follows",
+        "columns": [
+          "id UUID PRIMARY KEY",
+          "user_id UUID REFERENCES users(id) ON DELETE CASCADE",
+          "team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE",
+          "notify_match_start BOOLEAN DEFAULT true",
+          "notify_goals BOOLEAN DEFAULT true",
+          "notify_final_score BOOLEAN DEFAULT true",
+          "created_at TIMESTAMP DEFAULT NOW()",
+          "UNIQUE(user_id, team_id)"
+        ],
+        "indexes": ["user_id", "team_id"]
+      },
+      {
+        "name": "notifications",
+        "columns": [
+          "id UUID PRIMARY KEY",
+          "user_id UUID REFERENCES users(id) ON DELETE CASCADE",
+          "match_id INTEGER REFERENCES matches(id)",
+          "title VARCHAR(200) NOT NULL",
+          "body TEXT NOT NULL",
+          "type VARCHAR(50) (match_start, goal, final_score, insight)",
+          "is_read BOOLEAN DEFAULT false",
+          "sent_at TIMESTAMP DEFAULT NOW()"
+        ],
+        "indexes": ["user_id", "is_read", "sent_at"]
+      }
+    ]
+  },
+
+  "major_leagues_to_track": [
+    "Premier League (England)",
+    "La Liga (Spain)",
+    "Serie A (Italy)",
+    "Bundesliga (Germany)",
+    "Ligue 1 (France)",
+    "UEFA Champions League",
+    "UEFA Europa League",
+    "FIFA World Cup",
+    "UEFA European Championship",
+    "Copa America",
+    "English FA Cup",
+    "Copa del Rey"
+  ],
+
+  "user_flows": [
+    {
+      "flow_name": "User Registration & Onboarding",
+      "steps": [
+        "User lands on homepage showing live matches",
+        "User clicks 'Sign Up' button",
+        "User enters email, password, name",
+        "User verifies email (optional MVP skip)",
+        "User is redirected to team selection page",
+        "User searches and selects 3-5 favorite teams",
+        "User configures notification preferences",
+        "User is redirected to personalized dashboard"
+      ]
+    },
+    {
+      "flow_name": "Browse Live Matches",
+      "steps": [
+        "User opens app (no login required for viewing)",
+        "User sees list of live matches with real-time scores",
+        "User can filter by league or date",
+        "User clicks on a match card",
+        "User sees detailed match view with timeline, events, lineup",
+        "User sees AI insights updating in real-time",
+        "User can click 'Get Deep Analysis' for comprehensive AI report"
+      ]
+    },
+    {
+      "flow_name": "Follow Team & Receive Notifications",
+      "steps": [
+        "User is logged in",
+        "User navigates to team page or match detail",
+        "User clicks 'Follow Team' button with heart icon",
+        "User sees confirmation and notification settings modal",
+        "User customizes notification preferences (match start, goals, etc.)",
+        "User grants browser notification permission",
+        "User receives push notifications for followed team events"
+      ]
+    },
+    {
+      "flow_name": "AI Match Analysis Request",
+      "steps": [
+        "User is viewing a live or completed match",
+        "User clicks 'AI Deep Analysis' button",
+        "Loading state shows with animation",
+        "AI generates insights using GPT-4o-mini + web search",
+        "User sees comprehensive analysis with stats, tactics, predictions",
+        "User can ask follow-up questions (chat interface)",
+        "Analysis is cached for other users viewing same match"
+      ]
+    }
+  ],
+
+  "user_stories_and_acceptance_criteria": [
+    {
+      "user_story": "As a soccer fan, I want to see live match scores in real-time so I can stay updated on ongoing games",
+      "acceptance_criteria": [
+        "Live matches display with home/away team names, logos, and current score",
+        "Match status (LIVE, HT, FT) is clearly visible",
+        "Score updates within 30 seconds of real event",
+        "Elapsed match time shows and updates every minute",
+        "Matches are sorted by status (LIVE first, then upcoming, then finished)"
+      ]
+    },
+    {
+      "user_story": "As a user, I want to follow my favorite teams so I get notified about their matches",
+      "acceptance_criteria": [
+        "User can search and select teams to follow",
+        "Follow/unfollow action reflects immediately in UI",
+        "User can see list of all followed teams in profile",
+        "User receives notification when followed team's match starts",
+        "User receives notification when followed team scores",
+        "User can customize notification preferences per team"
+      ]
+    },
+    {
+      "user_story": "As a user, I want AI-generated insights about matches so I understand game tactics and player performance",
+      "acceptance_criteria": [
+        "AI generates pre-match analysis with team form, head-to-head, predictions",
+        "AI provides live updates during important events (goals, red cards)",
+        "AI generates halftime analysis with first-half summary",
+        "AI provides post-match analysis with key moments and player ratings",
+        "AI insights are contextual and use current match statistics",
+        "Deep analysis includes web search data about team news and injuries"
+      ]
+    },
+    {
+      "user_story": "As a mobile user, I want a beautiful and fast app experience so I can check scores on the go",
+      "acceptance_criteria": [
+        "App loads in under 2 seconds on 4G connection",
+        "All screens are fully responsive (320px to 1920px)",
+        "Touch targets are minimum 44x44px",
+        "Smooth animations and transitions (60fps)",
+        "App works offline showing cached data with 'offline' indicator",
+        "PWA installable on mobile devices"
+      ]
+    },
+    {
+      "user_story": "As a user, I want to filter matches by league and date so I can find relevant games",
+      "acceptance_criteria": [
+        "League filter dropdown shows all major leagues",
+        "Date picker allows selecting past 7 days and next 7 days",
+        "Filters apply instantly without page reload",
+        "Filter state persists in URL for sharing",
+        "Clear filters option visible when filters are active"
+      ]
+    }
+  ],
+
+  "ui_ux_design_specifications": {
+    "design_system": {
+      "typography": {
+        "font_family": "Inter for UI, Outfit for headings",
+        "scale": "text-xs(12px), text-sm(14px), text-base(16px), text-lg(18px), text-xl(20px), text-2xl(24px), text-3xl(30px)"
+      },
+      "colors": {
+        "primary": "#10b981 (emerald-500) - success, live matches",
+        "secondary": "#6366f1 (indigo-500) - CTAs, follows",
+        "accent": "#f59e0b (amber-500) - warnings, important events",
+        "background": "#0f172a (slate-900) - dark mode primary",
+        "surface": "#1e293b (slate-800) - cards, elevated surfaces",
+        "text_primary": "#f1f5f9 (slate-100)",
+        "text_secondary": "#94a3b8 (slate-400)",
+        "error": "#ef4444 (red-500)",
+        "success": "#10b981 (emerald-500)"
+      },
+      "spacing": "4px base unit, use Tailwind spacing scale",
+      "border_radius": "rounded-lg(8px) for cards, rounded-full for buttons",
+      "shadows": "subtle shadows for depth, glow effects for live indicators"
+    },
+    "key_screens": [
+      {
+        "screen_name": "Home / Live Matches",
+        "layout": "Sticky header with logo and user menu, filter chips below, match cards grid (1 column mobile, 2 desktop)",
+        "components": [
+          "Match card: team logos, names, score (large), status badge, league name, time, heart icon (if logged in)",
+          "Live pulse indicator: green animated dot for live matches",
+          "Empty state: 'No live matches. Check upcoming matches' with illustration"
+        ]
+      },
+      {
+        "screen_name": "Match Detail",
+        "layout": "Full screen with back button, match header (teams, score, time), tabs (Timeline, Stats, Lineups, AI Insights)",
+        "components": [
+          "Match header: sticky, shows live score and time",
+          "Timeline tab: vertical timeline with events (goals, cards, subs) with time stamps",
+          "AI Insights tab: chat-like interface with AI analysis cards, 'Get Deep Analysis' button",
+          "Stats visualization: possession bar, shots, passes (simple bar charts)",
+          "Lineups: formation visualization (4-3-3, etc.) with player names"
+        ]
+      },
+      {
+        "screen_name": "Team Page",
+        "layout": "Hero section with team logo, name, follow button, tabs (Upcoming, Results, Squad, Stats)",
+        "components": [
+          "Follow button: heart icon, shows follower count",
+          "Match list: past and upcoming matches in clean list",
+          "Quick stats: wins, losses, goals scored (dashboard cards)"
+        ]
+      },
+      {
+        "screen_name": "Profile / Settings",
+        "layout": "User info at top, sections for followed teams, notification preferences, account settings",
+        "components": [
+          "Followed teams grid: team cards with unfollow option",
+          "Notification toggles: match start, goals, final score, AI insights",
+          "Theme toggle (future): dark/light mode",
+          "Logout button"
+        ]
+      }
+    ],
+    "interactions": {
+      "match_card_tap": "Navigate to match detail with slide transition",
+      "follow_button": "Heart icon fills with scale animation, haptic feedback",
+      "live_updates": "Score changes with subtle flash animation and sound (optional)",
+      "pull_to_refresh": "Refresh match list on mobile",
+      "infinite_scroll": "Load more past matches as user scrolls"
+    }
+  },
+
+  "api_architecture": {
+    "rest_endpoints": [
+      {
+        "method": "POST",
+        "path": "/api/auth/register",
+        "description": "Register new user",
+        "auth": false,
+        "body": "{ email, password, name }",
+        "response": "{ user, accessToken, refreshToken }"
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/login",
+        "description": "Login user",
+        "auth": false,
+        "body": "{ email, password }",
+        "response": "{ user, accessToken, refreshToken }"
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/refresh",
+        "description": "Refresh access token",
+        "auth": false,
+        "body": "{ refreshToken }",
+        "response": "{ accessToken }"
+      },
+      {
+        "method": "GET",
+        "path": "/api/matches/live",
+        "description": "Get all live matches from major leagues",
+        "auth": false,
+        "query": "?league=39&date=2025-11-04",
+        "response": "{ matches: Match[] }"
+      },
+      {
+        "method": "GET",
+        "path": "/api/matches/:id",
+        "description": "Get match details including events and stats",
+        "auth": false,
+        "response": "{ match: Match, events: Event[], stats: Stats }"
+      },
+      {
+        "method": "POST",
+        "path": "/api/matches/:id/insights",
+        "description": "Generate AI insights for match",
+        "auth": true,
+        "body": "{ type: 'pre_match' | 'live' | 'post_match', deepAnalysis: boolean }",
+        "response": "{ insight: string, generatedAt: timestamp }"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teams/search",
+        "description": "Search teams by name",
+        "auth": false,
+        "query": "?q=manchester",
+        "response": "{ teams: Team[] }"
+      },
+      {
+        "method": "POST",
+        "path": "/api/teams/:id/follow",
+        "description": "Follow a team",
+        "auth": true,
+        "body": "{ notificationPreferences }",
+        "response": "{ success: boolean }"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/teams/:id/follow",
+        "description": "Unfollow a team",
+        "auth": true,
+        "response": "{ success: boolean }"
+      },
+      {
+        "method": "GET",
+        "path": "/api/users/me/following",
+        "description": "Get user's followed teams",
+        "auth": true,
+        "response": "{ teams: Team[], preferences: NotificationPreferences[] }"
+      },
+      {
+        "method": "GET",
+        "path": "/api/notifications",
+        "description": "Get user notifications",
+        "auth": true,
+        "query": "?page=1&limit=20",
+        "response": "{ notifications: Notification[], total: number }"
+      },
+      {
+        "method": "PATCH",
+        "path": "/api/notifications/:id/read",
+        "description": "Mark notification as read",
+        "auth": true,
+        "response": "{ success: boolean }"
+      }
+    ],
+    "websocket_events": {
+      "client_to_server": [
+        "subscribe_match: { matchId } - subscribe to match updates",
+        "unsubscribe_match: { matchId } - unsubscribe from match",
+        "subscribe_team: { teamId } - subscribe to team's match updates"
+      ],
+      "server_to_client": [
+        "match_update: { matchId, score, status, time } - real-time score update",
+        "match_event: { matchId, event } - goal, card, substitution event",
+        "match_started: { matchId } - match has started",
+        "match_ended: { matchId, finalScore } - match finished",
+        "ai_insight: { matchId, insight } - new AI insight generated"
+      ]
+    }
+  },
+
+  "background_jobs": [
+    {
+      "job_name": "fetch_live_matches",
+      "schedule": "Every 30 seconds",
+      "description": "Fetch live match updates from API-FOOTBALL and update database",
+      "logic": "Query API for live matches in major leagues, update scores and events, emit socket events for changes"
+    },
+    {
+      "job_name": "fetch_upcoming_matches",
+      "schedule": "Every 6 hours",
+      "description": "Fetch upcoming matches for next 7 days",
+      "logic": "Query API for scheduled matches in major leagues, store in database for display"
+    },
+    {
+      "job_name": "generate_pre_match_insights",
+      "schedule": "2 hours before match start",
+      "description": "Generate AI pre-match analysis for major matches",
+      "logic": "Query match info, team stats, generate GPT-4o-mini analysis, store in database"
+    },
+    {
+      "job_name": "send_match_start_notifications",
+      "schedule": "5 minutes before match start",
+      "description": "Send push notifications to users following teams",
+      "logic": "Query users following teams in upcoming matches, send FCM notifications"
+    },
+    {
+      "job_name": "cleanup_old_matches",
+      "schedule": "Daily at 3 AM",
+      "description": "Archive matches older than 30 days",
+      "logic": "Move old match data to archive table or delete based on retention policy"
+    }
+  ],
+
+  "ai_integration_details": {
+    "gpt4o_mini_usage": {
+      "pre_match_analysis": {
+        "prompt_template": "Analyze the upcoming match between {homeTeam} and {awayTeam} in {league}. Consider: recent form (last 5 matches), head-to-head history, key players, tactical approach. Provide prediction with confidence level. Keep analysis under 200 words.",
+        "context_data": "Team recent results, league standings, injuries, head-to-head stats",
+        "max_tokens": 300
+      },
+      "live_event_commentary": {
+        "prompt_template": "Provide quick tactical insight on this event: {eventType} by {playerName} at {minute}' in {homeTeam} vs {awayTeam} match. Current score: {score}. Keep under 50 words.",
+        "context_data": "Match context, current score, time",
+        "max_tokens": 80
+      },
+      "halftime_analysis": {
+        "prompt_template": "Provide halftime analysis for {homeTeam} vs {awayTeam}. First half stats: {stats}. Key events: {events}. What should teams adjust in second half? Keep under 150 words.",
+        "context_data": "First half stats, events, possession",
+        "max_tokens": 250
+      },
+      "deep_analysis_with_search": {
+        "prompt_template": "Perform comprehensive analysis of {homeTeam} vs {awayTeam}. Use web search to find: recent team news, injuries, manager comments, tactical trends. Provide: team form analysis, tactical breakdown, key player analysis, prediction with reasoning. Structure in sections.",
+        "context_data": "Full match and team data + web search results",
+        "max_tokens": 1000,
+        "use_web_search": true
+      }
+    },
+    "caching_strategy": {
+      "pre_match_insights": "Cache for 2 hours before match, invalidate when match starts",
+      "live_insights": "Cache per event for 5 minutes",
+      "post_match_analysis": "Cache permanently, store in database",
+      "deep_analysis": "Cache for 24 hours per match"
+    },
+    "rate_limiting": {
+      "free_users": "5 AI requests per day",
+      "premium_users": "Unlimited AI requests (future monetization)"
+    }
+  },
+
+  "testing_requirements": {
+    "unit_tests": {
+      "backend": [
+        "Auth service: register, login, token refresh, password hashing",
+        "Match service: fetch matches, update scores, filter by league/date",
+        "Team service: search teams, follow/unfollow logic",
+        "AI service: prompt generation, response parsing, caching",
+        "Notification service: create notification, send push, mark as read",
+        "WebSocket service: subscribe/unsubscribe, emit events",
+        "Utils: date formatting, validation schemas, error handling"
+      ],
+      "frontend": [
+        "Auth store: login, logout, token management",
+        "Match store: fetch matches, update live scores, filters",
+        "Team store: follow/unfollow, get followed teams",
+        "UI components: MatchCard, TeamCard, AIInsightCard, NotificationBadge",
+        "Hooks: useAuth, useWebSocket, useMatchUpdates",
+        "Utils: formatScore, formatTime, teamLogoFallback"
+      ],
+      "coverage_target": "Minimum 80% code coverage"
+    },
+    "integration_tests": [
+      "User registration flow: register → verify email → select teams → redirect to dashboard",
+      "Match following flow: search team → follow → verify notification preferences saved",
+      "Live match updates: simulate score change → verify WebSocket emit → verify UI update",
+      "AI insight generation: request insight → verify API call → verify response cached",
+      "Notification flow: match starts → job triggers → notification sent → user receives"
+    ],
+    "e2e_tests": {
+      "tool": "Playwright",
+      "critical_paths": [
+        "User can register, login, and see personalized dashboard",
+        "User can view live matches without login",
+        "User can follow team and configure notifications",
+        "User can view match detail and see AI insights",
+        "User receives notification when followed team scores (mock)",
+        "User can filter matches by league and date",
+        "User can search and find teams",
+        "User can logout and login again with same credentials"
+      ],
+      "test_environments": [
+        "Desktop Chrome (1920x1080)",
+        "Mobile Chrome (375x667 - iPhone SE)",
+        "Tablet Safari (768x1024 - iPad)"
+      ]
+    },
+    "performance_tests": [
+      "Page load time: Home page loads in under 2s on 4G",
+      "WebSocket latency: Score updates appear within 1s of emission",
+      "AI response time: Insights generate in under 5s",
+      "API response time: 95th percentile under 500ms",
+      "Database query optimization: All queries under 100ms",
+      "Concurrent users: Support 1000 concurrent WebSocket connections"
+    ],
+    "security_tests": [
+      "SQL injection prevention on all inputs",
+      "XSS prevention on user-generated content",
+      "JWT token expiration and refresh flow",
+      "Rate limiting on AI endpoints (prevent abuse)",
+      "CORS configuration for frontend domain only",
+      "Environment variables not exposed in frontend",
+      "Password hashing with bcrypt (min 10 rounds)"
+    ]
+  },
+
+  "implementation_phases": {
+    "phase_1_mvp": {
+      "duration": "2-3 weeks",
+      "features": [
+        "User authentication (register, login, JWT)",
+        "Display live matches from major leagues",
+        "Match detail page with basic stats and events",
+        "Follow/unfollow teams",
+        "Basic AI insights (pre-match and post-match only)",
+        "Real-time score updates via WebSocket",
+        "Responsive UI for mobile and desktop",
+        "Deploy backend to Railway, frontend to Vercel"
+      ],
+      "success_criteria": "Users can register, follow teams, see live scores, and get basic AI insights"
+    },
+    "phase_2_enhanced": {
+      "duration": "2 weeks",
+      "features": [
+        "Push notifications (match start, goals, final score)",
+        "Deep AI analysis with web search",
+        "Live AI commentary during match events",
+        "Advanced match stats and visualizations",
+        "Team pages with squad and statistics",
+        "Notification center in app",
+        "PWA support (installable, offline mode)",
+        "User preferences and settings page"
+      ]
+    },
+    "phase_3_polish": {
+      "duration": "1-2 weeks",
+      "features": [
+        "Animations and micro-interactions",
+        "Advanced filtering and search",
+        "Match highlights integration (if API available)",
+        "Social sharing of insights",
+        "Performance optimization and caching improvements",
+        "Comprehensive error handling and loading states",
+        "Analytics integration (Plausible or PostHog)",
+        "A/B testing setup for premium features"
+      ]
+    }
+  },
+
+  "monetization_strategy": {
+    "free_tier": [
+      "View all live matches",
+      "Follow up to 3 teams",
+      "5 AI insights per day",
+      "Basic notifications",
+      "Ads (non-intrusive banner)"
+    ],
+    "premium_tier": {
+      "price": "$4.99/month or $49/year",
+      "features": [
+        "Follow unlimited teams",
+        "Unlimited AI insights with deep analysis",
+        "Ad-free experience",
+        "Priority notifications (instant vs 1min delay)",
+        "Advanced stats and historical data",
+        "Export match reports (PDF)",
+        "Early access to new features"
+      ]
+    }
+  },
+
+  "environment_variables": {
+    "backend": [
+      "DATABASE_URL - PostgreSQL connection string",
+      "REDIS_URL - Redis connection string",
+      "JWT_SECRET - Secret for signing JWT tokens",
+      "JWT_REFRESH_SECRET - Secret for refresh tokens",
+      "OPENAI_API_KEY - OpenAI API key for GPT-4o-mini",
+      "RAPIDAPI_KEY - API-FOOTBALL key from RapidAPI",
+      "FCM_SERVER_KEY - Firebase Cloud Messaging server key",
+      "FRONTEND_URL - Frontend URL for CORS (https://yourapp.vercel.app)",
+      "NODE_ENV - development | production",
+      "PORT - Server port (default 3001)"
+    ],
+    "frontend": [
+      "VITE_API_URL - Backend API URL (https://yourapp.railway.app)",
+      "VITE_WS_URL - WebSocket URL (wss://yourapp.railway.app)",
+      "VITE_FCM_VAPID_KEY - Firebase VAPID key for push notifications",
+      "VITE_FIREBASE_CONFIG - Firebase config JSON"
+    ]
+  },
+
+  "folder_structure": {
+    "backend": {
+      "src": {
+        "config": ["database.ts", "redis.ts", "firebase.ts"],
+        "middleware": ["auth.ts", "errorHandler.ts", "rateLimiter.ts", "validator.ts"],
+        "routes": ["auth.routes.ts", "matches.routes.ts", "teams.routes.ts", "users.routes.ts", "notifications.routes.ts"],
+        "controllers": ["auth.controller.ts", "matches.controller.ts", "teams.controller.ts", "users.controller.ts"],
+        "services": ["auth.service.ts", "match.service.ts", "team.service.ts", "ai.service.ts", "notification.service.ts", "api-football.service.ts"],
+        "jobs": ["fetchLiveMatches.job.ts", "fetchUpcomingMatches.job.ts", "generateInsights.job.ts", "sendNotifications.job.ts"],
+        "websocket": ["socketServer.ts", "matchHandlers.ts"],
+        "utils": ["jwt.ts", "logger.ts", "cache.ts", "errors.ts"],
+        "types": ["match.types.ts", "team.types.ts", "user.types.ts"],
+        "prisma": ["schema.prisma", "seed.ts"],
+        "tests": ["unit", "integration"]
+      }
+    },
+    "frontend": {
+      "src": {
+        "components": {
+          "ui": ["Button.tsx", "Card.tsx", "Input.tsx", "Badge.tsx", "shadcn components"],
+          "match": ["MatchCard.tsx", "MatchDetail.tsx", "MatchTimeline.tsx", "MatchStats.tsx"],
+          "team": ["TeamCard.tsx", "TeamHeader.tsx", "FollowButton.tsx"],
+          "ai": ["AIInsightCard.tsx", "DeepAnalysisModal.tsx", "InsightSkeleton.tsx"],
+          "layout": ["Header.tsx", "Navigation.tsx", "Footer.tsx"],
+          "shared": ["Loading.tsx", "ErrorBoundary.tsx", "EmptyState.tsx"]
+        },
+        "pages": ["Home.tsx", "MatchDetail.tsx", "TeamPage.tsx", "Profile.tsx", "Login.tsx", "Register.tsx"],
+        "store": ["authStore.ts", "matchStore.ts", "teamStore.ts", "notificationStore.ts"],
+        "hooks": ["useAuth.ts", "useWebSocket.ts", "useMatchUpdates.ts", "useNotifications.ts"],
+        "services": ["api.ts", "websocket.ts", "notifications.ts"],
+        "utils": ["formatters.ts", "validators.ts", "constants.ts"],
+        "types": ["match.types.ts", "team.types.ts", "user.types.ts"],
+        "tests": ["unit", "e2e"]
+      }
+    }
+  },
+
+  "deployment_checklist": [
+    "Set up PostgreSQL database on Railway",
+    "Set up Redis instance on Railway",
+    "Configure environment variables on Railway",
+    "Deploy backend to Railway",
+    "Set up custom domain (optional)",
+    "Deploy frontend to Vercel",
+    "Configure CORS to allow Vercel domain",
+    "Set up Firebase project and enable FCM",
+    "Configure Firebase in frontend",
+    "Test WebSocket connection from production frontend",
+    "Set up Sentry for error monitoring",
+    "Configure rate limiting with Redis",
+    "Test all user flows in production",
+    "Set up database backup strategy",
+    "Configure SSL/TLS certificates (auto on Railway/Vercel)",
+    "Set up monitoring and alerts",
+    "Create initial seed data for major leagues and teams",
+    "Test notification delivery on iOS and Android"
+  ],
+
+  "success_metrics": {
+    "technical": [
+      "Page load time < 2s on 4G",
+      "WebSocket connection stability > 99%",
+      "API response time p95 < 500ms",
+      "Zero critical security vulnerabilities",
+      "Code coverage > 80%",
+      "Lighthouse score > 90"
+    ],
+    "product": [
+      "100 registered users in first month",
+      "Average 3 followed teams per user",
+      "30% notification open rate",
+      "Average session duration > 5 minutes",
+      "10% conversion to premium (after launch)"
+    ]
+  },
+
+  "notes_and_tips": [
+    "API-FOOTBALL has rate limits (100 requests/day on free tier), implement aggressive caching",
+    "Use Redis to cache live match data for 30 seconds to reduce API calls",
+    "Implement exponential backoff for failed API requests",
+    "Use database indexes on frequently queried columns (match_date, status, team_id)",
+    "Implement connection pooling for PostgreSQL (Prisma handles this)",
+    "Use WebSocket rooms for match-specific subscriptions to reduce broadcast overhead",
+    "Compress API responses with gzip",
+    "Lazy load match images and team logos",
+    "Use React.memo and useMemo for expensive computations",
+    "Implement optimistic UI updates for follow/unfollow actions",
+    "Use service workers for offline functionality and push notifications",
+    "Implement proper error boundaries in React for graceful error handling",
+    "Use Zod schemas for both frontend and backend validation (share types)",
+    "Implement database migrations with Prisma Migrate",
+    "Use BullMQ dashboard for monitoring background jobs",
+    "Implement proper logging with Winston or Pino (structured logs)",
+    "Use feature flags for gradual rollout of premium features",
+    "Consider using tRPC for type-safe API instead of REST (optional enhancement)",
+    "Implement proper rate limiting per user to prevent AI API abuse",
+    "Use CDN for static assets (Vercel handles this automatically)"
+  ]
+}

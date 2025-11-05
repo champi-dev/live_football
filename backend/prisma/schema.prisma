@@ -1,0 +1,243 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String         @id @default(uuid())
+  email                String         @unique
+  passwordHash         String         @map("password_hash")
+  name                 String
+  avatarUrl            String?        @map("avatar_url")
+  notificationEnabled  Boolean        @default(true) @map("notification_enabled")
+  fcmToken             String?        @map("fcm_token")
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
+
+  teamFollows          TeamFollow[]
+  notifications        Notification[]
+
+  @@index([email])
+  @@index([createdAt])
+  @@map("users")
+}
+
+model Team {
+  id              Int           @id
+  name            String
+  logoUrl         String?       @map("logo_url")
+  country         String?
+  leagueId        Int?          @map("league_id")
+  leagueName      String?       @map("league_name")
+  isMajor         Boolean       @default(false) @map("is_major")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  homeMatches     Match[]       @relation("HomeTeam")
+  awayMatches     Match[]       @relation("AwayTeam")
+  matchEvents     MatchEvent[]
+  teamFollows     TeamFollow[]
+
+  @@index([name])
+  @@index([leagueId])
+  @@index([isMajor])
+  @@map("teams")
+}
+
+enum MatchStatus {
+  NS    // Not Started
+  LIVE  // Live
+  HT    // Halftime
+  FT    // Full Time
+  PST   // Postponed
+  CANC  // Cancelled
+  TBD   // To Be Defined
+}
+
+model Match {
+  id              Int           @id
+  homeTeamId      Int           @map("home_team_id")
+  awayTeamId      Int           @map("away_team_id")
+  leagueId        Int           @map("league_id")
+  leagueName      String        @map("league_name")
+  matchDate       DateTime      @map("match_date")
+  status          MatchStatus
+  homeScore       Int           @default(0) @map("home_score")
+  awayScore       Int           @default(0) @map("away_score")
+  halfTimeHomeScore Int?        @map("half_time_home_score")
+  halfTimeAwayScore Int?        @map("half_time_away_score")
+  venue           String?
+  attendance      Int?
+  referee         String?
+  homeFormation   String?       @map("home_formation")
+  awayFormation   String?       @map("away_formation")
+  homeCoach       String?       @map("home_coach")
+  awayCoach       String?       @map("away_coach")
+  elapsedTime     Int?          @map("elapsed_time")
+  isMajorMatch    Boolean       @default(true) @map("is_major_match")
+  lastUpdated     DateTime      @default(now()) @map("last_updated")
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  homeTeam        Team             @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam        Team             @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  matchEvents     MatchEvent[]
+  matchLineups    MatchLineup[]
+  matchStatistics MatchStatistics?
+  aiInsights      AIInsight[]
+  notifications   Notification[]
+
+  @@index([matchDate])
+  @@index([status])
+  @@index([homeTeamId])
+  @@index([awayTeamId])
+  @@index([isMajorMatch])
+  @@map("matches")
+}
+
+enum EventType {
+  Goal
+  Card
+  Substitution
+  VAR
+}
+
+model MatchEvent {
+  id          String      @id @default(uuid())
+  matchId     Int         @map("match_id")
+  eventType   EventType   @map("event_type")
+  teamId      Int         @map("team_id")
+  playerName  String?     @map("player_name")
+  assistName  String?     @map("assist_name")
+  minute      Int
+  injuryTime  Int?        @map("injury_time")
+  detail      String?
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  match       Match       @relation(fields: [matchId], references: [id])
+  team        Team        @relation(fields: [teamId], references: [id])
+
+  @@index([matchId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("match_events")
+}
+
+enum InsightType {
+  pre_match
+  live_update
+  halftime
+  post_match
+}
+
+model AIInsight {
+  id                 String       @id @default(uuid())
+  matchId            Int          @map("match_id")
+  insightType        InsightType  @map("insight_type")
+  content            String
+  generatedAtMinute  Int?         @map("generated_at_minute")
+  tokensUsed         Int?         @map("tokens_used")
+  createdAt          DateTime     @default(now()) @map("created_at")
+
+  match              Match        @relation(fields: [matchId], references: [id])
+
+  @@index([matchId])
+  @@index([insightType])
+  @@index([createdAt])
+  @@map("ai_insights")
+}
+
+model TeamFollow {
+  id                  String    @id @default(uuid())
+  userId              String    @map("user_id")
+  teamId              Int       @map("team_id")
+  notifyMatchStart    Boolean   @default(true) @map("notify_match_start")
+  notifyGoals         Boolean   @default(true) @map("notify_goals")
+  notifyFinalScore    Boolean   @default(true) @map("notify_final_score")
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team                Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId])
+  @@index([userId])
+  @@index([teamId])
+  @@map("team_follows")
+}
+
+enum NotificationType {
+  match_start
+  goal
+  final_score
+  insight
+}
+
+model MatchLineup {
+  id           String   @id @default(uuid())
+  matchId      Int      @map("match_id")
+  teamId       Int      @map("team_id")
+  playerName   String   @map("player_name")
+  shirtNumber  Int?     @map("shirt_number")
+  position     String?
+  isStarting   Boolean  @default(true) @map("is_starting")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  match        Match    @relation(fields: [matchId], references: [id])
+
+  @@index([matchId])
+  @@index([teamId])
+  @@map("match_lineups")
+}
+
+model MatchStatistics {
+  id                   String   @id @default(uuid())
+  matchId              Int      @unique @map("match_id")
+  homePossession       Int?     @map("home_possession")
+  awayPossession       Int?     @map("away_possession")
+  homeShotsTotal       Int?     @map("home_shots_total")
+  awayShotsTotal       Int?     @map("away_shots_total")
+  homeShotsOnTarget    Int?     @map("home_shots_on_target")
+  awayShotsOnTarget    Int?     @map("away_shots_on_target")
+  homeShotsOffTarget   Int?     @map("home_shots_off_target")
+  awayShotsOffTarget   Int?     @map("away_shots_off_target")
+  homeCornerKicks      Int?     @map("home_corner_kicks")
+  awayCornerKicks      Int?     @map("away_corner_kicks")
+  homeFouls            Int?     @map("home_fouls")
+  awayFouls            Int?     @map("away_fouls")
+  homeOffsides         Int?     @map("home_offsides")
+  awayOffsides         Int?     @map("away_offsides")
+  homeYellowCards      Int?     @map("home_yellow_cards")
+  awayYellowCards      Int?     @map("away_yellow_cards")
+  homeRedCards         Int?     @map("home_red_cards")
+  awayRedCards         Int?     @map("away_red_cards")
+  homeSaves            Int?     @map("home_saves")
+  awaySaves            Int?     @map("away_saves")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  match                Match    @relation(fields: [matchId], references: [id])
+
+  @@index([matchId])
+  @@map("match_statistics")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String           @map("user_id")
+  matchId   Int?             @map("match_id")
+  title     String
+  body      String
+  type      NotificationType
+  isRead    Boolean          @default(false) @map("is_read")
+  sentAt    DateTime         @default(now()) @map("sent_at")
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  match     Match?           @relation(fields: [matchId], references: [id])
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([sentAt])
+  @@map("notifications")
+}
