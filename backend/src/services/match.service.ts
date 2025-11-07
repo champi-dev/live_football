@@ -71,22 +71,28 @@ export class MatchService {
         },
       });
 
-      // Sync lineups (starting XI and bench)
-      if (homeTeam.lineup || awayTeam.lineup) {
-        await this.syncLineups(matchId, homeTeam, awayTeam);
-      }
-
-      // Sync match statistics
-      if (homeTeam.statistics || awayTeam.statistics) {
-        await this.syncMatchStatistics(matchId, homeTeam.statistics, awayTeam.statistics);
-      }
-
-      // For live or finished matches, fetch detailed data to get events
-      // The bulk /matches endpoint doesn't include goals/bookings/substitutions
+      // For matches that need detailed data (lineups, statistics, events)
+      // The bulk /matches endpoint doesn't include Deep Data features
+      // Fetch detailed data for live, halftime, and finished matches
       if (match.status === 'LIVE' || match.status === 'HT' || match.status === 'FT') {
         try {
-          logger.debug(`Fetching detailed match data for ${matchId} to sync events`);
+          logger.debug(`Fetching detailed match data for ${matchId} (Deep Data: lineups, stats, events)`);
           const detailedMatch = await footballDataService.getMatchById(matchId);
+
+          // Sync lineups (starting XI and bench)
+          if (detailedMatch.homeTeam?.lineup || detailedMatch.awayTeam?.lineup ||
+              detailedMatch.homeTeam?.bench || detailedMatch.awayTeam?.bench) {
+            await this.syncLineups(matchId, detailedMatch.homeTeam, detailedMatch.awayTeam);
+            logger.debug(`Synced lineups for match ${matchId}`);
+          }
+
+          // Sync match statistics
+          if (detailedMatch.homeTeam?.statistics || detailedMatch.awayTeam?.statistics) {
+            await this.syncMatchStatistics(matchId, detailedMatch.homeTeam.statistics, detailedMatch.awayTeam.statistics);
+            logger.debug(`Synced statistics for match ${matchId}`);
+          }
+
+          // Sync match events (goals, bookings, substitutions)
           if (detailedMatch.goals || detailedMatch.bookings || detailedMatch.substitutions) {
             await this.syncMatchEventsEnhanced(matchId, detailedMatch);
             logger.debug(`Synced ${detailedMatch.goals?.length || 0} goals, ${detailedMatch.bookings?.length || 0} bookings, ${detailedMatch.substitutions?.length || 0} substitutions for match ${matchId}`);

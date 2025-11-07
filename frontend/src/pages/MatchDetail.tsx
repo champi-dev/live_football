@@ -43,7 +43,7 @@ export default function MatchDetail() {
     }
   };
 
-  const generateInsight = async (type: 'pre_match' | 'halftime' | 'post_match', deepAnalysis = false) => {
+  const generateInsight = async (type: 'pre_match' | 'live_update' | 'halftime' | 'post_match', deepAnalysis = false) => {
     if (!isAuthenticated) {
       toast.error('Please login to generate AI insights');
       return;
@@ -286,6 +286,17 @@ export default function MatchDetail() {
                     size="sm"
                   >
                     Generate Pre-Match Analysis
+                  </Button>
+                )}
+
+                {isMatchLive(match.status) && (
+                  <Button
+                    onClick={() => generateInsight('live_update')}
+                    disabled={generatingInsight || !isAuthenticated}
+                    className="w-full"
+                    size="sm"
+                  >
+                    Generate Live Match Update
                   </Button>
                 )}
 

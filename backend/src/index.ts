@@ -11,6 +11,7 @@ import teamRoutes from './routes/teams.routes';
 import userRoutes from './routes/users.routes';
 import notificationRoutes from './routes/notifications.routes';
 import { setupSocketServer } from './websocket/socketServer';
+import { initializeMatchSyncService } from './services/match-sync.service';
 
 dotenv.config();
 
@@ -53,6 +54,18 @@ app.use('/api/notifications', notificationRoutes);
 
 // Setup WebSocket
 setupSocketServer(io);
+
+// Initialize automated match sync service
+const matchSyncService = initializeMatchSyncService(io);
+
+// Sync status endpoint
+app.get('/api/sync/status', (req, res) => {
+  const stats = matchSyncService.getStats();
+  res.json({
+    success: true,
+    data: stats,
+  });
+});
 
 // Error handling
 app.use(errorHandler);

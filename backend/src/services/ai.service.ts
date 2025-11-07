@@ -122,6 +122,69 @@ Keep it under 50 words, punchy and insightful.`;
   }
 
   /**
+   * Generate live match update (for ongoing matches)
+   */
+  static async generateLiveMatchInsight(match: any, events: any[]) {
+    try {
+      const cacheKey = CacheKeys.aiInsight(match.id, 'live_update');
+      const cached = await CacheService.get(cacheKey);
+      if (cached) {
+        return cached;
+      }
+
+      const eventsSummary = events
+        .map((e) => `${e.minute}' - ${e.eventType}: ${e.playerName || 'Unknown'}`)
+        .join('\n');
+
+      const prompt = `Provide a live match update for ${match.homeTeam.name} ${match.homeScore} - ${match.awayScore} ${match.awayTeam.name}.
+
+Current minute: ${match.elapsedTime || 'Unknown'}
+Match events so far:
+${eventsSummary || 'No events yet'}
+
+Analyze the current flow of the game, key moments, and what to watch for. Keep under 150 words.`;
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a soccer analyst providing live match commentary and analysis.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        max_tokens: 250,
+        temperature: 0.7,
+      });
+
+      const content = completion.choices[0].message.content || '';
+      const tokensUsed = completion.usage?.total_tokens || 0;
+
+      // Save to database
+      const insight = await prisma.aIInsight.create({
+        data: {
+          matchId: match.id,
+          insightType: InsightType.live_update,
+          content,
+          generatedAtMinute: match.elapsedTime,
+          tokensUsed,
+        },
+      });
+
+      // Cache for 2 minutes (live data changes quickly)
+      await CacheService.set(cacheKey, insight, 120);
+
+      return insight;
+    } catch (error) {
+      logger.error('Error generating live match insight:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Generate halftime analysis
    */
   static async generateHalftimeInsight(match: any, firstHalfEvents: any[]) {

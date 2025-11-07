@@ -111,6 +111,9 @@ export class MatchesController {
           case 'pre_match':
             insight = await AIService.generatePreMatchInsight(match);
             break;
+          case 'live_update':
+            insight = await AIService.generateLiveMatchInsight(match, match.matchEvents);
+            break;
           case 'halftime':
             insight = await AIService.generateHalftimeInsight(match, match.matchEvents);
             break;
