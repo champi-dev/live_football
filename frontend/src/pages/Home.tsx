@@ -109,6 +109,16 @@ export default function Home() {
               <input
                 type="date"
                 value={date}
+                min={(() => {
+                  const minDate = new Date();
+                  minDate.setDate(minDate.getDate() - 2);
+                  return minDate.toISOString().split('T')[0];
+                })()}
+                max={(() => {
+                  const maxDate = new Date();
+                  maxDate.setDate(maxDate.getDate() + 2);
+                  return maxDate.toISOString().split('T')[0];
+                })()}
                 onChange={(e) => {
                   setDate(e.target.value);
                   setPage(1);
