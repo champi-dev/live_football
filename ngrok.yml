@@ -1,0 +1,16 @@
+# ngrok configuration for livefootball.lat
+#
+# Prerequisites:
+# 1. You must have an ngrok paid plan (Pro or higher) to use custom domains
+# 2. Add your authtoken: ngrok config add-authtoken YOUR_AUTH_TOKEN
+# 3. Configure DNS in Namecheap (see DEPLOYMENT.md)
+
+version: "2"
+authtoken: YOUR_AUTH_TOKEN_HERE
+
+tunnels:
+  livefootball:
+    addr: 3456
+    proto: http
+    domain: livefootball.lat
+    inspect: true

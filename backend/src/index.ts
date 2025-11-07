@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { errorHandler } from './middleware/errorHandler';
@@ -17,9 +18,15 @@ dotenv.config();
 
 const app = express();
 const httpServer = createServer(app);
+
+// Configure allowed origins based on environment
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? [process.env.FRONTEND_URL || 'https://livefootball.lat']
+  : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5176', 'http://localhost:5177', 'http://localhost:5178'];
+
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: allowedOrigins,
     credentials: true,
   },
 });
@@ -28,7 +35,7 @@ const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: allowedOrigins,
   credentials: true,
 }));
 app.use(express.json());
@@ -67,13 +74,23 @@ app.get('/api/sync/status', (req, res) => {
   });
 });
 
+// Serve static files in production
+if (process.env.NODE_ENV === 'production') {
+  const frontendDistPath = path.join(__dirname, '../../frontend/dist');
+  app.use(express.static(frontendDistPath));
+
+  // Serve index.html for all non-API routes (SPA support)
+  app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api')) {
+      res.sendFile(path.join(frontendDistPath, 'index.html'));
+    } else {
+      res.status(404).json({ error: 'API endpoint not found' });
+    }
+  });
+}
+
 // Error handling
 app.use(errorHandler);
-
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: 'Not found' });
-});
 
 httpServer.listen(PORT, () => {
   logger.info(`🚀 Server running on port ${PORT}`);
