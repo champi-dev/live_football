@@ -1,4 +1,4 @@
-import { format, formatDistanceToNow, isToday, isTomorrow, isPast } from 'date-fns';
+import { format, formatDistanceToNow, isToday, isTomorrow } from 'date-fns';
 
 /**
  * Format date for display

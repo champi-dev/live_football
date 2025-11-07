@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import cron, { ScheduledTask } from 'node-cron';
 import { Server } from 'socket.io';
 import { footballDataService } from './football-data.service';
 import { MatchService } from './match.service';
@@ -12,7 +12,7 @@ import { emitMatchUpdate, emitMatchEvent } from '../websocket/socketServer';
  */
 export class MatchSyncService {
   private io: Server;
-  private syncJob: cron.ScheduledTask | null = null;
+  private syncJob: ScheduledTask | null = null;
   private isEnabled: boolean = true;
   private lastSyncTime: Date | null = null;
   private syncCount: number = 0;

@@ -125,7 +125,7 @@ export const matchesAPI = {
 
   generateInsight: async (
     id: number,
-    type: 'pre_match' | 'halftime' | 'post_match',
+    type: 'pre_match' | 'live_update' | 'halftime' | 'post_match',
     deepAnalysis = false
   ) => {
     const { data } = await api.post<ApiResponse<AIInsight>>(`/matches/${id}/insights`, {

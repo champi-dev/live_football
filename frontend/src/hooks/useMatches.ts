@@ -86,10 +86,10 @@ export function useGenerateInsight() {
       deepAnalysis = false
     }: {
       matchId: number;
-      type: 'pre_match' | 'halftime' | 'post_match';
+      type: 'pre_match' | 'live_update' | 'halftime' | 'post_match';
       deepAnalysis?: boolean;
     }) => matchesAPI.generateInsight(matchId, type, deepAnalysis),
-    onSuccess: (data, variables) => {
+    onSuccess: (_data, variables) => {
       // Invalidate insights cache to refetch
       queryClient.invalidateQueries({ queryKey: matchesKeys.insights(variables.matchId) });
       toast.success('AI insight generated!');

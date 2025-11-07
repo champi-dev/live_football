@@ -396,7 +396,7 @@ export class MatchService {
     status?: string;
     page?: number;
     limit?: number;
-  }) {
+  }): Promise<{ matches: any[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> {
     const {
       leagueId,
       date,
@@ -415,7 +415,7 @@ export class MatchService {
     const cached = await CacheService.get(cacheKey);
     if (cached) {
       logger.debug('Returning cached matches query');
-      return cached;
+      return cached as { matches: any[]; pagination: { page: number; limit: number; total: number; totalPages: number } };
     }
 
     const where: any = {
